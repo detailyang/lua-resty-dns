@@ -14,7 +14,7 @@ use Cwd qw(cwd);
 
 repeat_each(2);
 
-plan tests => repeat_each() * (3 * blocks() + 16);
+plan tests => repeat_each() * (3 * blocks() + 17);
 
 my $pwd = cwd();
 
@@ -56,8 +56,8 @@ __DATA__
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -73,7 +73,7 @@ GET /t
 --- udp_query eval
 "\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{03}www\x{06}google\x{03}com\x{00}\x{00}\x{01}\x{00}\x{01}"
 --- response_body
-records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google.com","ttl":123456}]
+records: [{"address":"127.0.0.1","class":1,"name":"www.google.com","section":1,"ttl":123456,"type":1}]
 --- no_error_log
 [error]
 
@@ -102,8 +102,8 @@ records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.goog
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -116,7 +116,7 @@ records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.goog
 --- request
 GET /t
 --- response_body
-records: {}
+records: []
 --- no_error_log
 [error]
 
@@ -130,7 +130,8 @@ records: {}
             local resolver = require "resty.dns.resolver"
 
             local r, err = resolver:new{
-                nameservers = { {"127.0.0.1", 1953} }
+                nameservers = { {"127.0.0.1", 1953} },
+                retrans = 1,
             }
             if not r then
                 ngx.say("failed to instantiate resolver: ", err)
@@ -143,8 +144,8 @@ records: {}
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -166,7 +167,8 @@ connect() failed
             local resolver = require "resty.dns.resolver"
 
             local r, err = resolver:new{
-                nameservers = { {"127.0.0.1", 1953} }
+                nameservers = { {"127.0.0.1", 1953} },
+                retrans = 1,
             }
             if not r then
                 ngx.say("failed to instantiate resolver: ", err)
@@ -181,8 +183,8 @@ connect() failed
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -219,8 +221,8 @@ connect() failed
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -237,7 +239,7 @@ connect() failed
 --- request
 GET /t
 --- response_body
-records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google.com","ttl":123456},{"address":"0:0:0:0:0:0:0:1","section":1,"type":28,"class":1,"name":"l.www.google.com","ttl":0}]
+records: [{"address":"127.0.0.1","class":1,"name":"www.google.com","section":1,"ttl":123456,"type":1},{"address":"0:0:0:0:0:0:0:1","class":1,"name":"l.www.google.com","section":1,"ttl":0,"type":28}]
 --- no_error_log
 [error]
 
@@ -266,8 +268,8 @@ records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.goog
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -283,7 +285,7 @@ records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.goog
 --- request
 GET /t
 --- response_body
-records: [{"section":1,"ttl":125,"type":5,"class":1,"name":"www.google.com","cname":"blah.google.com"}]
+records: [{"class":1,"cname":"blah.google.com","name":"www.google.com","section":1,"ttl":125,"type":5}]
 --- no_error_log
 [error]
 
@@ -297,7 +299,8 @@ records: [{"section":1,"ttl":125,"type":5,"class":1,"name":"www.google.com","cna
             local resolver = require "resty.dns.resolver"
 
             local r, err = resolver:new{
-                nameservers = { {"127.0.0.1", 1953} }
+                nameservers = { {"127.0.0.1", 1953} },
+                retrans = 1,
             }
             if not r then
                 ngx.say("failed to instantiate resolver: ", err)
@@ -312,8 +315,8 @@ records: [{"section":1,"ttl":125,"type":5,"class":1,"name":"www.google.com","cna
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -343,7 +346,8 @@ failed to query: bad cname record length: 17 ~= 3
             local resolver = require "resty.dns.resolver"
 
             local r, err = resolver:new{
-                nameservers = { {"127.0.0.1", 1953} }
+                nameservers = { {"127.0.0.1", 1953} },
+                retrans = 1,
             }
             if not r then
                 ngx.say("failed to instantiate resolver: ", err)
@@ -358,8 +362,8 @@ failed to query: bad cname record length: 17 ~= 3
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -387,7 +391,8 @@ failed to query: bad A record value length: 1
             local resolver = require "resty.dns.resolver"
 
             local r, err = resolver:new{
-                nameservers = { {"127.0.0.1", 1953} }
+                nameservers = { {"127.0.0.1", 1953} },
+                retrans = 1,
             }
             if not r then
                 ngx.say("failed to instantiate resolver: ", err)
@@ -402,8 +407,8 @@ failed to query: bad A record value length: 1
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -451,8 +456,8 @@ failed to query: bad AAAA record value length: 21
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -502,8 +507,8 @@ lua udp socket read timed out
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -520,7 +525,7 @@ lua udp socket read timed out
 --- request
 GET /t
 --- response_body
-records: [{"address":"ff01:0:0:0:0:0:0:101","section":1,"type":28,"class":1,"name":"l.www.google.com","ttl":0}]
+records: [{"address":"ff01:0:0:0:0:0:0:101","class":1,"name":"l.www.google.com","section":1,"ttl":0,"type":28}]
 --- error_log
 lua udp socket read timed out
 --- timeout: 3
@@ -553,8 +558,8 @@ lua udp socket read timed out
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -604,8 +609,8 @@ lua udp socket read timed out
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -651,14 +656,14 @@ records: {"errcode":1,"errstr":"format error"}
                 return
             end
 
-            local cjson = require "cjson"
+            local ljson = require "ljson"
 
             if ans.errcode then
                 ngx.say("error code: ", ans.errcode, ": ", ans.errstr)
             end
 
             for i, rec in ipairs(ans) do
-                ngx.say("record: ", cjson.encode(rec))
+                ngx.say("record: ", ljson.encode(rec))
             end
         ';
     }
@@ -675,7 +680,7 @@ records: {"errcode":1,"errstr":"format error"}
 GET /t
 --- response_body
 error code: 2: server failure
-record: {"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google.com","ttl":123456}
+record: {"address":"127.0.0.1","class":1,"name":"www.google.com","section":1,"ttl":123456,"type":1}
 --- no_error_log
 [error]
 
@@ -707,8 +712,8 @@ record: {"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -754,8 +759,8 @@ records: {"errcode":3,"errstr":"name error"}
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -801,8 +806,8 @@ records: {"errcode":4,"errstr":"not implemented"}
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -848,8 +853,8 @@ records: {"errcode":5,"errstr":"refused"}
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -878,7 +883,7 @@ records: {"errcode":6,"errstr":"unknown"}
 
             local r, err = resolver:new{
                 nameservers = { {"127.0.0.1", 1953} },
-                retrans = 3,
+                retrans = 1,
             }
             if not r then
                 ngx.say("failed to instantiate resolver: ", err)
@@ -895,8 +900,8 @@ records: {"errcode":6,"errstr":"unknown"}
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -924,7 +929,7 @@ connect() failed
 
             local r, err = resolver:new{
                 nameservers = { {"127.0.0.1", 1953} },
-                retrans = 3,
+                retrans = 1,
             }
             if not r then
                 ngx.say("failed to instantiate resolver: ", err)
@@ -941,8 +946,8 @@ connect() failed
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -989,8 +994,8 @@ failed to query: bad QR flag in the DNS response
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -1004,7 +1009,7 @@ failed to query: bad QR flag in the DNS response
 --- request
 GET /t
 --- response_body
-records: {}
+records: []
 --- no_error_log
 [error]
 --- no_check_leak
@@ -1036,8 +1041,8 @@ records: {}
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -1085,8 +1090,8 @@ id mismatch in the DNS reply: 126 ~= 125
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -1122,7 +1127,7 @@ GET /t
 --- udp_query eval
 "\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{03}www\x{06}google\x{03}com\x{00}\x{00}\x{01}\x{00}\x{01}"
 --- response_body
-records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google.com","ttl":123456}]
+records: [{"address":"127.0.0.1","class":1,"name":"www.google.com","section":1,"ttl":123456,"type":1}]
 --- error_log
 id mismatch in the DNS reply: 126 ~= 125
 id mismatch in the DNS reply: 120 ~= 125
@@ -1157,8 +1162,8 @@ id mismatch in the DNS reply: 127 ~= 125
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -1183,7 +1188,7 @@ id mismatch in the DNS reply: 127 ~= 125
 --- request
 GET /t
 --- response_body
-records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google.com","ttl":123456},{"address":"0:0:0:0:0:0:0:1","section":1,"type":28,"class":1,"name":"l.www.google.com","ttl":0}]
+records: [{"address":"127.0.0.1","class":1,"name":"www.google.com","section":1,"ttl":123456,"type":1},{"address":"0:0:0:0:0:0:0:1","class":1,"name":"l.www.google.com","section":1,"ttl":0,"type":28}]
 --- no_error_log
 [error]
 --- error_log
@@ -1215,8 +1220,8 @@ query the TCP server due to reply truncation
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -1236,7 +1241,7 @@ query the TCP server due to reply truncation
 --- request
 GET /t
 --- response_body
-records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google.com","ttl":123456},{"address":"0:0:0:0:0:0:0:1","section":1,"type":28,"class":1,"name":"l.www.google.com","ttl":0}]
+records: [{"address":"127.0.0.1","class":1,"name":"www.google.com","section":1,"ttl":123456,"type":1},{"address":"0:0:0:0:0:0:0:1","class":1,"name":"l.www.google.com","section":1,"ttl":0,"type":28}]
 --- no_error_log
 [error]
 --- error_log
@@ -1653,8 +1658,8 @@ records: [{"class":1,"name":"www.google.com","port":8080,"priority":1,"section":
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -1671,7 +1676,7 @@ GET /t
 --- udp_query eval
 "\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{03}www\x{06}google\x{03}com\x{00}\x{00}\x{01}\x{00}\x{01}"
 --- response_body
-records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google.com","ttl":123456}]
+records: [{"address":"127.0.0.1","class":1,"name":"www.google.com","section":1,"ttl":123456,"type":1}]
 --- no_error_log
 [error]
 
@@ -1700,8 +1705,8 @@ records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.goog
                 return
             end
 
-            local cjson = require "cjson"
-            ngx.say("records: ", cjson.encode(ans))
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
         ';
     }
 --- udp_listen: 1953
@@ -1718,6 +1723,274 @@ GET /t
 --- udp_query eval
 "\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{03}www\x{06}google\x{03}com\x{00}\x{00}\x{01}\x{00}\x{01}"
 --- response_body
-records: [{"address":"127.0.0.1","section":1,"type":1,"class":1,"name":"www.google.com","ttl":123456}]
+records: [{"address":"127.0.0.1","class":1,"name":"www.google.com","section":1,"ttl":123456,"type":1}]
 --- no_error_log
 [error]
+
+
+
+=== TEST 35: reply with SOA followed by additional data
+--- http_config eval: $::HttpConfig
+--- config
+    location /t {
+        content_by_lua_block {
+            local resolver = require "resty.dns.resolver"
+
+            local r, err = resolver:new{
+                nameservers = { {"127.0.0.1", 1953} }
+            }
+            if not r then
+                ngx.say("failed to instantiate resolver: ", err)
+                return
+            end
+
+            r._id = 125
+
+            local ans, err = r:query("google.com", { qtype = r.TYPE_SOA, additional_section = true })
+            if not ans then
+                ngx.say("failed to query: ", err)
+                return
+            end
+
+            local ljson = require "ljson"
+            ngx.say("records: ", ljson.encode(ans))
+        }
+    }
+--- udp_listen: 1953
+--- udp_reply dns
+{
+    id => 125,
+    opcode => 0,
+    qname => "google.com",
+    aa => 1,
+    answer => [
+        {
+            name => "google.com",
+            soa => "ns3.google.com",
+            rname => "dns-admin.google.com",
+            serial => 175802026,
+            refresh => 900,
+            retry => 900,
+            expire => 1800,
+            minimum => 60,
+            ttl => 0
+        }
+    ],
+    additional => [
+        {
+            name => "ns3.google.com",
+            ipv4 => "127.0.0.1",
+            ttl => 0
+        }
+    ]
+}
+--- request
+GET /t
+--- udp_query eval
+"\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{06}google\x{03}com\x{00}\x{00}\x{06}\x{00}\x{01}"
+--- response_body
+records: [{"class":1,"expire":1800,"minimum":60,"mname":"ns3.google.com","name":"google.com","refresh":900,"retry":900,"rname":"dns-admin.google.com","section":1,"serial":175802026,"ttl":0,"type":6},{"address":"127.0.0.1","class":1,"name":"ns3.google.com","section":3,"ttl":0,"type":1}]
+--- no_error_log
+[error]
+
+
+
+=== TEST 36: retry on connection failures
+--- http_config eval: $::HttpConfig
+--- config
+    location /t {
+        content_by_lua_block {
+            local resolver = require "resty.dns.resolver"
+
+            local r, err = resolver:new{
+                nameservers = { {"127.0.0.1", 20000} },  -- note: bad port
+                retrans = 3,
+            }
+            if not r then
+                ngx.say("failed to instantiate resolver: ", err)
+                return
+            end
+
+            r._id = 125
+
+            local ans, err, lst = r:query("www.google.com", { qtype = r.TYPE_A }, {})
+            if not ans then
+                ngx.say("failed to query: ", err, " ", (lst[#lst] == err))
+                for i, err in ipairs(lst) do
+                    ngx.say(i, ": ", err)
+                end
+                return
+            end
+            -- should not reach here
+        }
+    }
+--- request
+GET /t
+--- udp_query eval
+"\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{03}www\x{06}google\x{03}com\x{00}\x{00}\x{01}\x{00}\x{01}"
+--- response_body
+failed to query: failed to receive reply from UDP server 127.0.0.1:20000: connection refused true
+1: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+2: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+3: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+--- error_log
+Connection refused
+
+
+
+=== TEST 37: retry on connection failures, multiple servers
+--- http_config eval: $::HttpConfig
+--- config
+    location /t {
+        content_by_lua_block {
+            local resolver = require "resty.dns.resolver"
+
+            local r, err = resolver:new{
+                nameservers = {       -- note: using bad ports
+                    {"127.0.0.1", 20000},
+                    {"127.0.0.1", 20001},
+                    {"127.0.0.1", 20002},
+                },
+                retrans = 3,
+            }
+            if not r then
+                ngx.say("failed to instantiate resolver: ", err)
+                return
+            end
+
+            r._id = 125
+
+            local ans, err, lst = r:query("www.google.com", { qtype = r.TYPE_A }, {})
+            if not ans then
+                ngx.say("failed to query:")
+                table.sort(lst)  -- must sort because we have a random start
+                for i, err in ipairs(lst) do
+                    ngx.say(i, ": ", err)
+                end
+                return
+            end
+            -- should not reach here
+        }
+    }
+--- request
+GET /t
+--- udp_query eval
+"\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{03}www\x{06}google\x{03}com\x{00}\x{00}\x{01}\x{00}\x{01}"
+--- response_body
+failed to query:
+1: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+2: failed to receive reply from UDP server 127.0.0.1:20001: connection refused
+3: failed to receive reply from UDP server 127.0.0.1:20002: connection refused
+--- error_log
+Connection refused
+
+
+
+=== TEST 38: no_random always starts at first server
+--- http_config eval: $::HttpConfig
+--- config
+    location /t {
+        content_by_lua_block {
+            local resolver = require "resty.dns.resolver"
+
+            local ans, err, lst
+            local tries = {}
+            for i = 1, 10 do
+                local r, err = resolver:new{
+                    nameservers = {       -- note: using bad ports
+                        {"127.0.0.1", 20000},
+                        {"127.0.0.1", 20001},
+                        {"127.0.0.1", 20002},
+                    },
+                    retrans = 1,
+                    no_random = true,
+                }
+                if not r then
+                    ngx.say("failed to instantiate resolver: ", err)
+                    return
+                end
+
+                --r._id = 125
+
+                local ans, err, lst = r:query("www.google.com", { qtype = r.TYPE_A }, {})
+                if ans then
+                    error("query wasn't supposed to succeed")
+                end
+                for _, try in ipairs(lst) do
+                    tries[#tries+1] = try
+                end
+            end
+            ngx.say("tries:")
+            --table.sort(lst)
+            for i, err in ipairs(tries) do
+                ngx.say(i, ": ", err)
+            end
+            return
+        }
+    }
+--- request
+GET /t
+--- udp_query eval
+"\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{03}www\x{06}google\x{03}com\x{00}\x{00}\x{01}\x{00}\x{01}"
+--- response_body
+tries:
+1: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+2: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+3: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+4: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+5: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+6: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+7: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+8: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+9: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+10: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+--- error_log
+Connection refused
+
+
+
+=== TEST 39: no_random tries servers in defined order
+--- http_config eval: $::HttpConfig
+--- config
+    location /t {
+        content_by_lua_block {
+            local resolver = require "resty.dns.resolver"
+
+            local r, err = resolver:new{
+                nameservers = {       -- note: using bad ports
+                    {"127.0.0.1", 20000},
+                    {"127.0.0.1", 20001},
+                    {"127.0.0.1", 20002},
+                },
+                retrans = 3,
+                no_random = true,
+            }
+            if not r then
+                ngx.say("failed to instantiate resolver: ", err)
+                return
+            end
+
+            r._id = 125
+
+            local ans, err, lst = r:query("www.google.com", { qtype = r.TYPE_A }, {})
+            if not ans then
+                ngx.say("failed to query:")
+                for i, err in ipairs(lst) do
+                    ngx.say(i, ": ", err)
+                end
+                return
+            end
+            -- should not reach here
+        }
+    }
+--- request
+GET /t
+--- udp_query eval
+"\x{00}}\x{01}\x{00}\x{00}\x{01}\x{00}\x{00}\x{00}\x{00}\x{00}\x{00}\x{03}www\x{06}google\x{03}com\x{00}\x{00}\x{01}\x{00}\x{01}"
+--- response_body
+failed to query:
+1: failed to receive reply from UDP server 127.0.0.1:20000: connection refused
+2: failed to receive reply from UDP server 127.0.0.1:20001: connection refused
+3: failed to receive reply from UDP server 127.0.0.1:20002: connection refused
+--- error_log
+Connection refused

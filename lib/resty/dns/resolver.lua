@@ -21,11 +21,10 @@ local re_sub = ngx.re.sub
 local tcp = ngx.socket.tcp
 local log = ngx.log
 local DEBUG = ngx.DEBUG
-local randomseed = math.randomseed
-local ngx_time = ngx.time
 local unpack = unpack
 local setmetatable = setmetatable
 local type = type
+local ipairs = ipairs
 
 
 local ok, new_tab = pcall(require, "table.new")
@@ -43,6 +42,7 @@ local IP6_ARPA = "ip6.arpa"
 local TYPE_A      = 1
 local TYPE_NS     = 2
 local TYPE_CNAME  = 5
+local TYPE_SOA    = 6
 local TYPE_PTR    = 12
 local TYPE_MX     = 15
 local TYPE_TXT    = 16
@@ -58,10 +58,11 @@ local SECTION_AR  = 3
 
 
 local _M = {
-    _VERSION    = '0.17',
+    _VERSION    = '0.23',
     TYPE_A      = TYPE_A,
     TYPE_NS     = TYPE_NS,
     TYPE_CNAME  = TYPE_CNAME,
+    TYPE_SOA    = TYPE_SOA,
     TYPE_PTR    = TYPE_PTR,
     TYPE_MX     = TYPE_MX,
     TYPE_TXT    = TYPE_TXT,
@@ -83,6 +84,7 @@ local resolver_errstrs = {
     "refused",          -- 5
 }
 
+local soa_int32_fields = { "serial", "refresh", "retry", "expire", "minimum" }
 
 local mt = { __index = _M }
 
@@ -95,6 +97,29 @@ end
 
 for i = 2, 64, 2 do
     arpa_tmpl[i] = DOT_CHAR
+end
+
+
+local function udp_socks_close(self)
+    if self.socks == nil then
+        return
+    end
+
+    for _, sock in ipairs(self.socks) do
+        sock:close()
+    end
+
+    self.socks = nil
+end
+
+
+local function tcp_socks_close(self)
+    if self.tcp_sock == nil then
+        return
+    end
+
+    self.tcp_sock:close()
+    self.tcp_sock = nil
 end
 
 
@@ -150,12 +175,23 @@ function _M.new(class, opts)
     tcp_sock:settimeout(timeout)
 
     return setmetatable(
-                { cur = rand(1, n), socks = socks,
+                { cur = opts.no_random and 1 or rand(1, n),
+                  socks = socks,
                   tcp_sock = tcp_sock,
                   servers = servers,
                   retrans = opts.retrans or 5,
                   no_recurse = opts.no_recurse,
                 }, mt)
+end
+
+
+function _M:destroy()
+    udp_socks_close(self)
+    tcp_socks_close(self)
+    self.cur = nil
+    self.servers = nil
+    self.retrans = nil
+    self.no_recurse = nil
 end
 
 
@@ -249,6 +285,10 @@ local function _decode_name(buf, pos)
 
         else
             -- being a label
+            if p + fst > #buf then
+                return nil, "truncated"
+            end
+
             local label = sub(buf, p + 1, p + fst)
             insert(labels, label)
 
@@ -260,6 +300,10 @@ local function _decode_name(buf, pos)
                 pos = p
             end
         end
+    end
+
+    if nptrs == 128 then
+        return nil, "too many compression pointers"
     end
 
     return concat(labels, "."), pos
@@ -292,7 +336,7 @@ local function _build_request(qname, id, no_recurse, opts)
     local nan = "\0\0"
     local nns = "\0\0"
     local nar = "\0\0"
-    local typ = "\0" .. char(qtype)
+    local typ = char(rshift(qtype, 8), band(qtype, 0xff))
     local class = "\0\1"    -- the Internet class
 
     if byte(qname, 1) == DOT_CHAR then
@@ -312,7 +356,7 @@ local function parse_section(answers, section, buf, start_pos, size,
                              should_skip)
     local pos = start_pos
 
-    for i = 1, size do
+    for _ = 1, size do
         -- print(format("ans %d: qtype:%d qclass:%d", i, qtype, qclass))
         local ans = {}
 
@@ -332,6 +376,10 @@ local function parse_section(answers, section, buf, start_pos, size,
 
         -- print("name: ", name)
 
+        if pos + 9 > #buf then
+            return nil, "truncated"
+        end
+
         local type_hi = byte(buf, pos)
         local type_lo = byte(buf, pos + 1)
         local typ = lshift(type_hi, 8) + type_lo
@@ -348,12 +396,10 @@ local function parse_section(answers, section, buf, start_pos, size,
 
         -- print("class: ", class)
 
-        local ttl_bytes = { byte(buf, pos + 4, pos + 7) }
+        local byte_1, byte_2, byte_3, byte_4 = byte(buf, pos + 4, pos + 7)
 
-        -- print("ttl bytes: ", concat(ttl_bytes, " "))
-
-        local ttl = lshift(ttl_bytes[1], 24) + lshift(ttl_bytes[2], 16)
-                    + lshift(ttl_bytes[3], 8) + ttl_bytes[4]
+        local ttl = lshift(byte_1, 24) + lshift(byte_2, 16)
+                    + lshift(byte_3, 8) + byte_4
 
         -- print("ttl: ", ttl)
 
@@ -366,12 +412,19 @@ local function parse_section(answers, section, buf, start_pos, size,
         -- print("record len: ", len)
 
         pos = pos + 10
+        local last = pos + len - 1
+        if typ == TYPE_A and len ~= 4 then
+            return nil, "bad A record value length: " .. len
+
+        elseif typ == TYPE_AAAA and len ~= 16 then
+            return nil, "bad AAAA record value length: " .. len
+        end
+
+        if last > #buf then
+            return nil, "truncated"
+        end
 
         if typ == TYPE_A then
-
-            if len ~= 4 then
-                return nil, "bad A record value length: " .. len
-            end
 
             local addr_bytes = { byte(buf, pos, pos + 3) }
             local addr = concat(addr_bytes, ".")
@@ -385,7 +438,7 @@ local function parse_section(answers, section, buf, start_pos, size,
 
             local cname, p = _decode_name(buf, pos)
             if not cname then
-                return nil, pos
+                return nil, p
             end
 
             if p - pos ~= len then
@@ -401,13 +454,8 @@ local function parse_section(answers, section, buf, start_pos, size,
 
         elseif typ == TYPE_AAAA then
 
-            if len ~= 16 then
-                return nil, "bad AAAA record value length: " .. len
-            end
-
             local addr_bytes = { byte(buf, pos, pos + 15) }
             local flds = {}
-            local comp_begin, comp_end
             for i = 1, 16, 2 do
                 local a = addr_bytes[i]
                 local b = addr_bytes[i + 1]
@@ -441,7 +489,7 @@ local function parse_section(answers, section, buf, start_pos, size,
 
             local host, p = _decode_name(buf, pos + 2)
             if not host then
-                return nil, pos
+                return nil, p
             end
 
             if p - pos ~= len then
@@ -472,7 +520,7 @@ local function parse_section(answers, section, buf, start_pos, size,
 
             local name, p = _decode_name(buf, pos + 6)
             if not name then
-                return nil, pos
+                return nil, p
             end
 
             if p - pos ~= len then
@@ -488,7 +536,7 @@ local function parse_section(answers, section, buf, start_pos, size,
 
             local name, p = _decode_name(buf, pos)
             if not name then
-                return nil, pos
+                return nil, p
             end
 
             if p - pos ~= len then
@@ -506,10 +554,13 @@ local function parse_section(answers, section, buf, start_pos, size,
 
             local key = (typ == TYPE_TXT) and "txt" or "spf"
 
+            if len == 0 then
+                return nil, "bad " .. key .. " record value length: 0"
+            end
+
             local slen = byte(buf, pos)
             if slen + 1 > len then
-                -- truncate the over-run TXT record data
-                slen = len
+                return nil, "bad " .. key .. " record string length"
             end
 
             -- print("slen: ", len)
@@ -529,8 +580,7 @@ local function parse_section(answers, section, buf, start_pos, size,
                 repeat
                     local slen = byte(buf, pos)
                     if pos + slen + 1 > last then
-                        -- truncate the over-run TXT record data
-                        slen = last - pos - 1
+                        return nil, "bad " .. key .. " record string length"
                     end
 
                     val[idx] = sub(buf, pos + 1, pos + slen)
@@ -546,7 +596,7 @@ local function parse_section(answers, section, buf, start_pos, size,
 
             local name, p = _decode_name(buf, pos)
             if not name then
-                return nil, pos
+                return nil, p
             end
 
             if p - pos ~= len then
@@ -559,6 +609,33 @@ local function parse_section(answers, section, buf, start_pos, size,
             -- print("name: ", name)
 
             ans.ptrdname = name
+
+        elseif typ == TYPE_SOA then
+            local name, p = _decode_name(buf, pos)
+            if not name then
+                return nil, p
+            end
+            ans.mname = name
+
+            pos = p
+            name, p = _decode_name(buf, pos)
+            if not name then
+                return nil, p
+            end
+            ans.rname = name
+
+            if p + 19 ~= last then
+                return nil, "bad SOA record value length: " .. len
+            end
+
+            for _, field in ipairs(soa_int32_fields) do
+                local byte_1, byte_2, byte_3, byte_4 = byte(buf, p, p + 3)
+                ans[field] = lshift(byte_1, 24) + lshift(byte_2, 16)
+                            + lshift(byte_3, 8) + byte_4
+                p = p + 4
+            end
+
+            pos = p
 
         else
             -- for unknown types, just forward the raw value
@@ -684,6 +761,9 @@ local function parse_response(buf, id, opts)
     if opts then
         authority_section = opts.authority_section
         additional_section = opts.additional_section
+        if opts.qtype == TYPE_SOA then
+            authority_section = true
+        end
     end
 
     local err
@@ -762,9 +842,9 @@ local function _tcp_query(self, query, id, opts)
             .. concat(server, ":") .. ": " .. err
     end
 
-    local len_hi = byte(buf, 1)
-    local len_lo = byte(buf, 2)
-    local len = lshift(len_hi, 8) + len_lo
+    len_hi = byte(buf, 1)
+    len_lo = byte(buf, 2)
+    len = lshift(len_hi, 8) + len_lo
 
     -- print("tcp message len: ", len)
 
@@ -805,7 +885,7 @@ function _M.tcp_query(self, qname, opts)
 end
 
 
-function _M.query(self, qname, opts)
+function _M.query(self, qname, opts, tries)
     local socks = self.socks
     if not socks then
         return nil, "not initialized"
@@ -822,55 +902,60 @@ function _M.query(self, qname, opts)
     -- print("query: ", cjson.encode(concat(query, "")))
 
     local retrans = self.retrans
+    if tries then
+        tries[1] = nil
+    end
 
     -- print("retrans: ", retrans)
 
     for i = 1, retrans do
         local sock = pick_sock(self, socks)
 
-        local ok, err = sock:send(query)
+        local ok
+        ok, err = sock:send(query)
         if not ok then
             local server = _get_cur_server(self)
-            return nil, "failed to send request to UDP server "
+            err = "failed to send request to UDP server "
                 .. concat(server, ":") .. ": " .. err
-        end
 
-        local buf, err
+        else
+            local buf
 
-        for j = 1, 128 do
-            buf, err = sock:receive(4096)
-
-            if err then
-                break
-            end
-
-            if buf then
-                local answers
-                answers, err = parse_response(buf, id, opts)
-                if not answers then
-                    if err == "truncated" then
-                        return _tcp_query(self, query, id, opts)
-                    end
-
-                    if err ~= "id mismatch" then
-                        return nil, err
-                    end
-
-                    -- retry receiving when err == "id mismatch"
-                else
-                    return answers
+            for _ = 1, 128 do
+                buf, err = sock:receive(4096)
+                if err then
+                    local server = _get_cur_server(self)
+                    err = "failed to receive reply from UDP server "
+                        .. concat(server, ":") .. ": " .. err
+                    break
                 end
+
+                if buf then
+                    local answers
+                    answers, err = parse_response(buf, id, opts)
+                    if err == "truncated" then
+                        answers, err = _tcp_query(self, query, id, opts)
+                    end
+
+                    if err and err ~= "id mismatch" then
+                        break
+                    end
+
+                    if answers then
+                        return answers, nil, tries
+                    end
+                end
+                -- only here in case of an "id mismatch"
             end
         end
 
-        if err ~= "timeout" or i == retrans then
-            local server = _get_cur_server(self)
-            return nil, "failed to receive reply from UDP server "
-                .. concat(server, ":") .. ": " .. err
+        if tries then
+            tries[i] = err
+            tries[i + 1] = nil -- ensure termination for user supplied table
         end
     end
 
-    -- impossible to reach here
+    return nil, err, tries
 end
 
 
@@ -920,7 +1005,7 @@ function _M.arpa_str(addr)
         for i = addrlen, 0, -1 do
             local s = byte(addr, i)
             if s == COLON_CHAR or not s then
-                for j = hidx, 4 do
+                for _ = hidx, 4 do
                     arpa_tmpl[idx] = ZERO_CHAR
                     idx = idx + 2
                 end
@@ -946,9 +1031,6 @@ function _M.reverse_query(self, addr)
     return self.query(self, self.arpa_str(addr),
                       {qtype = self.TYPE_PTR})
 end
-
-
-randomseed(ngx_time())
 
 
 return _M
